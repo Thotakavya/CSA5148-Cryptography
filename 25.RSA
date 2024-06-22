@@ -1,0 +1,63 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <gmp.h>  // GNU MP library for arbitrary precision arithmetic
+
+// Function to compute gcd using Euclid's algorithm
+mpz_t gcd(mpz_t a, mpz_t b) {
+    mpz_t temp;
+    mpz_init(temp);
+    while (mpz_cmp_ui(b, 0) != 0) {
+        mpz_set(temp, b);
+        mpz_mod(b, a, b);
+        mpz_set(a, temp);
+    }
+    mpz_clear(temp);
+    return a;
+}
+
+int main() {
+    mpz_t n, e, M;
+    mpz_inits(n, e, M, NULL);
+
+    // Initialize n and e (public key) from known values
+    mpz_set_ui(n, 18721);  // Example value, replace with actual n value
+    mpz_set_ui(e, 17);     // Example value, replace with actual e value
+
+    // Assume someone tells us M has a common factor with n
+    mpz_set_ui(M, 4096);   // Example value, replace with actual plaintext block M
+
+    // Find gcd(M, n)
+    mpz_t gcd_value;
+    mpz_init(gcd_value);
+    mpz_gcd(gcd_value, M, n);
+
+    // Check if gcd(M, n) gives a non-trivial factor
+    if (mpz_cmp_ui(gcd_value, 1) > 0 && mpz_cmp(gcd_value, n) < 0) {
+        // gcd(M, n) is a non-trivial factor of n
+        // Assume gcd(M, n) is p (or q)
+        mpz_t p, q, phi_n, d;
+        mpz_inits(p, q, phi_n, d, NULL);
+
+        // p is found, q can be calculated as q = n / p
+        mpz_set(p, gcd_value);
+        mpz_tdiv_q(q, n, p);
+
+        // Calculate phi(n)
+        mpz_sub_ui(p, p, 1);  // p-1
+        mpz_sub_ui(q, q, 1);  // q-1
+        mpz_mul(phi_n, p, q); // phi(n) = (p-1)(q-1)
+
+        // Find private key d using extended Euclidean algorithm
+        mpz_invert(d, e, phi_n);  // d = e^-1 mod phi(n)
+
+        // Output the private key d
+        gmp_printf("Private key (d): %Zd\n", d);
+
+        mpz_clears(n, e, M, gcd_value, p, q, phi_n, d, NULL);
+        return 0;
+    } else {
+        printf("No non-trivial factor found, cannot proceed.\n");
+        mpz_clears(n, e, M, gcd_value, NULL);
+        return 1;
+    }
+}
