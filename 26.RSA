@@ -1,0 +1,89 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <gmp.h>
+
+// Function to calculate gcd using Euclid's algorithm
+void gcd(mpz_t result, mpz_t a, mpz_t b) {
+    while (mpz_cmp_ui(b, 0) != 0) {
+        mpz_mod(result, a, b);
+        mpz_set(a, b);
+        mpz_set(b, result);
+    }
+}
+
+// Function to generate a random prime number of bit size n
+void generate_prime(mpz_t prime, int n) {
+    gmp_randstate_t state;
+    gmp_randinit_default(state);
+    mpz_urandomb(prime, state, n);
+    mpz_nextprime(prime, prime);
+    gmp_randclear(state);
+}
+
+// Function to generate RSA key pairs
+void generate_rsa_keys(mpz_t p, mpz_t q, mpz_t e, mpz_t d, mpz_t n) {
+    mpz_t phi_n, gcd_value, temp;
+    mpz_inits(phi_n, gcd_value, temp, NULL);
+
+    // Generate two large random prime numbers p and q
+    generate_prime(p, 512); // 512-bit primes for demonstration
+    generate_prime(q, 512);
+
+    // Calculate modulus n = p * q
+    mpz_mul(n, p, q);
+
+    // Calculate Euler's totient function φ(n) = (p-1)*(q-1)
+    mpz_sub_ui(p, p, 1); // p-1
+    mpz_sub_ui(q, q, 1); // q-1
+    mpz_mul(phi_n, p, q);
+
+    // Choose a public exponent e (typically a small prime, commonly 65537)
+    mpz_set_ui(e, 65537); // 2^16 + 1 is a common choice for e
+
+    // Ensure gcd(e, φ(n)) == 1
+    gcd(gcd_value, e, phi_n);
+    while (mpz_cmp_ui(gcd_value, 1) != 0) {
+        mpz_nextprime(e, e); // Increment e until gcd(e, φ(n)) == 1
+        gcd(gcd_value, e, phi_n);
+    }
+
+    // Calculate private key d such that (d * e) % φ(n) == 1
+    mpz_invert(d, e, phi_n);
+
+    // Clear temporary variables
+    mpz_clears(phi_n, gcd_value, temp, NULL);
+}
+
+int main() {
+    mpz_t p, q, e, d, n;
+    mpz_inits(p, q, e, d, n, NULL);
+
+    // Generate RSA key pair (p, q, e, d, n)
+    generate_rsa_keys(p, q, e, d, n);
+
+    // Print generated keys
+    gmp_printf("Public Key (e, n): (%Zd, %Zd)\n", e, n);
+    gmp_printf("Private Key (d, n): (%Zd, %Zd)\n", d, n);
+
+    // Simulating scenario where Bob's private key d is leaked
+    printf("\n*** After Bob's private key d is leaked ***\n");
+
+    // Generate new RSA key pair with new public exponent e' and private exponent d'
+    mpz_t e_new, d_new;
+    mpz_inits(e_new, d_new, NULL);
+
+    // Choose a new public exponent e'
+    mpz_set_ui(e_new, 65537); // Using the same public exponent for simplicity
+
+    // Calculate new private key d' such that (d' * e_new) % φ(n) == 1
+    mpz_invert(d_new, e_new, n);
+
+    // Print new generated keys
+    gmp_printf("New Public Key (e', n): (%Zd, %Zd)\n", e_new, n);
+    gmp_printf("New Private Key (d', n): (%Zd, %Zd)\n", d_new, n);
+
+    // Clear allocated memory
+    mpz_clears(p, q, e, d, n, e_new, d_new, NULL);
+
+    return 0;
+}
