@@ -1,87 +1,223 @@
+#include <openssl/des.h>
+#include <openssl/rand.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <openssl/aes.h>
-unsigned char aes_key[] = "0123456789abcdef";
-unsigned char iv[] = "1234567890abcdef";
-#define AES_BLOCK_SIZE 16
-void print_hex(const char *label, const unsigned char *data, int len) {
-    int i;
-    printf("%s: ", label);
-    for (i = 0; i < len; ++i)
-        printf("%02x ", data[i]);
+#include <stdlib.h>
+
+#define BLOCK_SIZE 8 // DES block size is 8 bytes
+
+void handleErrors(void) {
+    fprintf(stderr, "An error occurred.\n");
+    exit(1);
+}
+
+void generate_random_bytes(unsigned char *buffer, int length) {
+    if (!RAND_bytes(buffer, length)) {
+        handleErrors();
+    }
+}
+
+void pad(unsigned char *plaintext, int *length) {
+    int padding_length = BLOCK_SIZE - (*length % BLOCK_SIZE);
+    if (padding_length == 0) padding_length = BLOCK_SIZE;
+    plaintext[*length] = 0x80; // 1 bit followed by zeros
+    for (int i = 1; i < padding_length; i++) {
+        plaintext[*length + i] = 0x00;
+    }
+    *length += padding_length;
+}
+
+void print_hex(unsigned char *data, int length) {
+    for (int i = 0; i < length; i++) {
+        printf("%02x", data[i]);
+    }
     printf("\n");
 }
-void encrypt_ecb(const unsigned char *plaintext, int plaintext_len, unsigned char *ciphertext) {
-    AES_KEY enc_key;
-    AES_set_encrypt_key(aes_key, 128, &enc_key);
-    int blocks = plaintext_len / AES_BLOCK_SIZE;
-    for (int i = 0; i < blocks; ++i) {
-        AES_encrypt(plaintext + i * AES_BLOCK_SIZE, ciphertext + i * AES_BLOCK_SIZE, &enc_key);
+
+int main(void) {
+    DES_key_schedule ks1, ks2, ks3;
+    DES_cblock key1, key2, key3, iv;
+    unsigned char plaintext[BLOCK_SIZE * 2] = "This is a test message for encryption.";
+    unsigned char ciphertext[sizeof(plaintext) + BLOCK_SIZE];
+    unsigned char decryptedtext[sizeof(ciphertext)];
+    int plaintext_length = strlen((char *)plaintext);
+    int ciphertext_length;
+
+    // Generate random keys and IV
+    generate_random_bytes(key1, sizeof(DES_cblock));
+    generate_random_bytes(key2, sizeof(DES_cblock));
+    generate_random_bytes(key3, sizeof(DES_cblock));
+    generate_random_bytes(iv, sizeof(DES_cblock));
+
+    // Set up the key schedules
+    DES_set_key_unchecked(&key1, &ks1);
+    DES_set_key_unchecked(&key2, &ks2);
+    DES_set_key_unchecked(&key3, &ks3);
+
+    // Pad the plaintext
+    pad(plaintext, &plaintext_length);
+
+    // Encrypt using ECB mode
+    for (int i = 0; i < plaintext_length; i += BLOCK_SIZE) {
+        DES_ecb3_encrypt((DES_cblock *)(plaintext + i), (DES_cblock *)(ciphertext + i), &ks1, &ks2, &ks3, DES_ENCRYPT);
     }
-}
-void decrypt_ecb(const unsigned char *ciphertext, int ciphertext_len, unsigned char *decryptedtext) {
-    AES_KEY dec_key;
-    AES_set_decrypt_key(aes_key, 128, &dec_key);
-    int blocks = ciphertext_len / AES_BLOCK_SIZE;
-    for (int i = 0; i < blocks; ++i) {
-        AES_decrypt(ciphertext + i * AES_BLOCK_SIZE, decryptedtext + i * AES_BLOCK_SIZE, &dec_key);
+    ciphertext_length = plaintext_length;
+
+    printf("ECB Ciphertext: ");
+    print_hex(ciphertext, ciphertext_length);
+
+    // Decrypt using ECB mode
+    for (int i = 0; i < ciphertext_length; i += BLOCK_SIZE) {
+        DES_ecb3_encrypt((DES_cblock *)(ciphertext + i), (DES_cblock *)(decryptedtext + i), &ks1, &ks2, &ks3, DES_DECRYPT);
     }
-}
-void encrypt_cbc(const unsigned char *plaintext, int plaintext_len, unsigned char *ciphertext) {
-    AES_KEY enc_key;
-    AES_set_encrypt_key(aes_key, 128, &enc_key);
-    AES_cbc_encrypt(plaintext, ciphertext, plaintext_len, &enc_key, iv, AES_ENCRYPT);
-}
-void decrypt_cbc(const unsigned char *ciphertext, int ciphertext_len, unsigned char *decryptedtext) {
-    AES_KEY dec_key;
-    AES_set_decrypt_key(aes_key, 128, &dec_key);
-    AES_cbc_encrypt(ciphertext, decryptedtext, ciphertext_len, &dec_key, iv, AES_DECRYPT);
-}
-void encrypt_cfb(const unsigned char *plaintext, int plaintext_len, unsigned char *ciphertext) {
-    AES_KEY enc_key;
-    AES_set_encrypt_key(aes_key, 128, &enc_key);
-    unsigned char iv_enc[AES_BLOCK_SIZE];
-    memcpy(iv_enc, iv, AES_BLOCK_SIZE);
-    AES_cfb128_encrypt(plaintext, ciphertext, plaintext_len, &enc_key, iv_enc, NULL, AES_ENCRYPT);
-}
-void decrypt_cfb(const unsigned char *ciphertext, int ciphertext_len, unsigned char *decryptedtext) {
-    AES_KEY dec_key;
-    AES_set_decrypt_key(aes_key, 128, &dec_key);
-    unsigned char iv_dec[AES_BLOCK_SIZE];
-    memcpy(iv_dec, iv, AES_BLOCK_SIZE);
-    AES_cfb128_encrypt(ciphertext, decryptedtext, ciphertext_len, &dec_key, iv_dec, NULL, AES_DECRYPT);
-}
 
-int main() {
-    unsigned char plaintext[] = "Hello, world!!!";
-    int plaintext_len = strlen((char *)plaintext);
-    int ciphertext_len_ecb = ((plaintext_len - 1) / AES_BLOCK_SIZE + 1) * AES_BLOCK_SIZE;
-    int ciphertext_len_cbc = plaintext_len + AES_BLOCK_SIZE; // CBC mode needs additional space for padding
-    int ciphertext_len_cfb = plaintext_len; // CFB mode doesn't require extra space
-    unsigned char ciphertext_ecb[ciphertext_len_ecb];
-    unsigned char ciphertext_cbc[ciphertext_len_cbc];
-    unsigned char ciphertext_cfb[ciphertext_len_cfb];
-    unsigned char decryptedtext_ecb[ciphertext_len_ecb];
-    unsigned char decryptedtext_cbc[ciphertext_len_cbc];
-    unsigned char decryptedtext_cfb[ciphertext_len_cfb];
-    encrypt_ecb(plaintext, plaintext_len, ciphertext_ecb);
-    print_hex("ECB Ciphertext", ciphertext_ecb, ciphertext_len_ecb);
+    printf("ECB Decrypted text: %s\n", decryptedtext);
 
-    decrypt_ecb(ciphertext_ecb, ciphertext_len_ecb, decryptedtext_ecb);
-    printf("ECB Decrypted text: %s\n", decryptedtext_ecb);
+    // Encrypt using CBC mode
+    DES_ede3_cbc_encrypt(plaintext, ciphertext, plaintext_length, &ks1, &ks2, &ks3, &iv, DES_ENCRYPT);
 
-    encrypt_cbc(plaintext, plaintext_len, ciphertext_cbc);
-    print_hex("CBC Ciphertext", ciphertext_cbc, ciphertext_len_cbc);
+    printf("CBC Ciphertext: ");
+    print_hex(ciphertext, ciphertext_length);
 
-    decrypt_cbc(ciphertext_cbc, ciphertext_len_cbc, decryptedtext_cbc);
-    printf("CBC Decrypted text: %s\n", decryptedtext_cbc);
+    // Reset IV for decryption
+    generate_random_bytes(iv, sizeof(DES_cblock));
 
-    encrypt_cfb(plaintext, plaintext_len, ciphertext_cfb);
-    print_hex("CFB Ciphertext", ciphertext_cfb, ciphertext_len_cfb);
+    // Decrypt using CBC mode
+    DES_ede3_cbc_encrypt(ciphertext, decryptedtext, ciphertext_length, &ks1, &ks2, &ks3, &iv, DES_DECRYPT);
 
-    decrypt_cfb(ciphertext_cfb, ciphertext_len_cfb, decryptedtext_cfb);
-    printf("CFB Decrypted text: %s\n", decryptedtext_cfb);
+    printf("CBC Decrypted text: %s\n", decryptedtext);
+
+    // Encrypt using CFB mode
+    DES_ede3_cfb64_encrypt(plaintext, ciphertext, plaintext_length, &ks1, &ks2, &ks3, &iv, &n, DES_ENCRYPT);
+
+    printf("CFB Ciphertext: ");
+    print_hex(ciphertext, ciphertext_length);
+
+    // Reset IV for decryption
+    generate_random_bytes(iv, sizeof(DES_cblock));
+
+    // Decrypt using CFB mode
+    DES_ede3_cfb64_encrypt(ciphertext, decryptedtext, ciphertext_length, &ks1, &ks2, &ks3, &iv, &n, DES_DECRYPT);
+
+    printf("CFB Decrypted text: %s\n", decryptedtext);
 
     return 0;
 }
+Output :
+#include <openssl/des.h>
+#include <openssl/rand.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define BLOCK_SIZE 8 // DES block size is 8 bytes
+
+void handleErrors(void) {
+    fprintf(stderr, "An error occurred.\n");
+    exit(1);
+}
+
+void generate_random_bytes(unsigned char *buffer, int length) {
+    if (!RAND_bytes(buffer, length)) {
+        handleErrors();
+    }
+}
+
+void pad(unsigned char *plaintext, int *length) {
+    int padding_length = BLOCK_SIZE - (*length % BLOCK_SIZE);
+    if (padding_length == 0) padding_length = BLOCK_SIZE;
+    plaintext[*length] = 0x80; // 1 bit followed by zeros
+    for (int i = 1; i < padding_length; i++) {
+        plaintext[*length + i] = 0x00;
+    }
+    *length += padding_length;
+}
+
+void print_hex(unsigned char *data, int length) {
+    for (int i = 0; i < length; i++) {
+        printf("%02x", data[i]);
+    }
+    printf("\n");
+}
+
+int main(void) {
+    DES_key_schedule ks1, ks2, ks3;
+    DES_cblock key1, key2, key3, iv;
+    unsigned char plaintext[BLOCK_SIZE * 2] = "This is a test message for encryption.";
+    unsigned char ciphertext[sizeof(plaintext) + BLOCK_SIZE];
+    unsigned char decryptedtext[sizeof(ciphertext)];
+    int plaintext_length = strlen((char *)plaintext);
+    int ciphertext_length;
+
+    // Generate random keys and IV
+    generate_random_bytes(key1, sizeof(DES_cblock));
+    generate_random_bytes(key2, sizeof(DES_cblock));
+    generate_random_bytes(key3, sizeof(DES_cblock));
+    generate_random_bytes(iv, sizeof(DES_cblock));
+
+    // Set up the key schedules
+    DES_set_key_unchecked(&key1, &ks1);
+    DES_set_key_unchecked(&key2, &ks2);
+    DES_set_key_unchecked(&key3, &ks3);
+
+    // Pad the plaintext
+    pad(plaintext, &plaintext_length);
+
+    // Encrypt using ECB mode
+    for (int i = 0; i < plaintext_length; i += BLOCK_SIZE) {
+        DES_ecb3_encrypt((DES_cblock *)(plaintext + i), (DES_cblock *)(ciphertext + i), &ks1, &ks2, &ks3, DES_ENCRYPT);
+    }
+    ciphertext_length = plaintext_length;
+
+    printf("ECB Ciphertext: ");
+    print_hex(ciphertext, ciphertext_length);
+
+    // Decrypt using ECB mode
+    for (int i = 0; i < ciphertext_length; i += BLOCK_SIZE) {
+        DES_ecb3_encrypt((DES_cblock *)(ciphertext + i), (DES_cblock *)(decryptedtext + i), &ks1, &ks2, &ks3, DES_DECRYPT);
+    }
+
+    printf("ECB Decrypted text: %s\n", decryptedtext);
+
+    // Encrypt using CBC mode
+    DES_ede3_cbc_encrypt(plaintext, ciphertext, plaintext_length, &ks1, &ks2, &ks3, &iv, DES_ENCRYPT);
+
+    printf("CBC Ciphertext: ");
+    print_hex(ciphertext, ciphertext_length);
+
+    // Reset IV for decryption
+    generate_random_bytes(iv, sizeof(DES_cblock));
+
+    // Decrypt using CBC mode
+    DES_ede3_cbc_encrypt(ciphertext, decryptedtext, ciphertext_length, &ks1, &ks2, &ks3, &iv, DES_DECRYPT);
+
+    printf("CBC Decrypted text: %s\n", decryptedtext);
+
+    // Encrypt using CFB mode
+    DES_ede3_cfb64_encrypt(plaintext, ciphertext, plaintext_length, &ks1, &ks2, &ks3, &iv, &n, DES_ENCRYPT);
+
+    printf("CFB Ciphertext: ");
+    print_hex(ciphertext, ciphertext_length);
+
+    // Reset IV for decryption
+    generate_random_bytes(iv, sizeof(DES_cblock));
+
+    // Decrypt using CFB mode
+    DES_ede3_cfb64_encrypt(ciphertext, decryptedtext, ciphertext_length, &ks1, &ks2, &ks3, &iv, &n, DES_DECRYPT);
+
+    printf("CFB Decrypted text: %s\n", decryptedtext);
+
+    return 0;
+}
+Output :
+Enter plaintext (max 255 characters): rddfghjcxsdfgh
+Enter key (8 characters): jj
+Enter initialization vector (8 characters): hhhf
+Original plaintext: rddfghjcxsdfghÇ
+ECB ciphertext: 18 0e 64 66 67 68 6a 63 12 19 64 66 67 68 80 00
+CBC ciphertext: 70 66 0c 00 67 68 6a 63 62 7f 68 66 00 00 ea 63
+CFB ciphertext: 70 66 0c 00 67 68 6a 63 62 7f 68 66 00 00 ea 63
+Decrypted ECB plaintext: rddfghjcxsdfghÇ
+Decrypted CBC plaintext: rddfghjczq
+
+Decrypted CFB plaintext: rddfghjczq
