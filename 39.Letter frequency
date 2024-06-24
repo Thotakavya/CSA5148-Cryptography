@@ -29,7 +29,8 @@ int main() {
     printf("Decrypted message: %s\n", message);    
     return 0;
 }
-Output :
-Enter a message: how is your health
-Enter the key (shift): Encrypted message: how
-Decrypted message: how
+Output:
+Enter a message: meghana
+Enter the key (shift): 2
+Encrypted message: ogijcpc
+Decrypted message: meghana
