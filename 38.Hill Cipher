@@ -1,35 +1,63 @@
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-void encryptCaesarCipher(char message[], int key) {
-    int i;
-    for (i = 0; message[i] != '\0'; i++) {
-        char character = message[i];   
-        if (character >= 'a' && character <= 'z') {
-            character = 'a' + (character - 'a' + key) % 26;
-        } else if (character >= 'A' && character <= 'Z') {
-            character = 'A' + (character - 'A' + key) % 26;
-        }        
-        message[i] = character;
+int mod(int a, int m) {
+    int result = a % m;
+    if (result < 0) {
+        result += m;
     }
+    return result;
 }
-void decryptCaesarCipher(char message[], int key) {
-    encryptCaesarCipher(message, 26 - key);
+void hillCipherEncrypt(int keyMatrix[3][3], char* input, int len) {
+    int encrypted[len];
+    printf("Plaintext: %s\n", input);  
+    for (int i = 0; i < len; i += 3) {
+        for (int j = 0; j < 3; j++) {
+            encrypted[i + j] = 0;
+            for (int k = 0; k < 3; k++) {
+                encrypted[i + j] += keyMatrix[j][k] * (input[i + k] - 'A');
+            }
+            encrypted[i + j] = mod(encrypted[i + j], 26);
+        }
+    }
+    printf("Ciphertext: ");
+    for (int i = 0; i < len; i++) {
+        printf("%c", encrypted[i] + 'A');
+    }
+    printf("\n");
 }
 int main() {
-    char message[100];
-    int key;   
-    printf("Enter a message: ");
-    scanf("%s",&message);      
-    printf("Enter the key (shift): ");
-    scanf("%d", &key);    
-    encryptCaesarCipher(message, key);
-    printf("Encrypted message: %s\n", message);   
-    decryptCaesarCipher(message, key);
-    printf("Decrypted message: %s\n", message);    
+    int keyMatrix[3][3];
+    char input[100];
+    int len;
+    printf("Enter the 3x3 key matrix:\n");
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            scanf("%d", &keyMatrix[i][j]);
+        }
+    }
+    printf("Enter the plaintext (in uppercase): ");
+    scanf("%s", input);
+    len = strlen(input);
+    while (len % 3 != 0) {
+        input[len] = 'X';
+        len++;
+    }
+    hillCipherEncrypt(keyMatrix, input, len);
     return 0;
 }
 Output :
-Enter a message: how is your health
-Enter the key (shift): Encrypted message: how
-Decrypted message: how
+Enter the 3x3 key matrix:
+2
+3
+4
+5
+6
+7
+8
+1
+2
+Enter the plaintext (in uppercase): MEFG
+Plaintext: MEFGXX
+Ciphertext: EPGRRN
